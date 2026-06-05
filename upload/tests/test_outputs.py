@@ -44,42 +44,15 @@ def query_one(app, sql, params=()):
 
 
 def test_shared_file_link_only_serves_files_from_the_shared_document(app, client):
-    shared = query_one(
-        app,
-        """
-        SELECT share_links.code, documents.id AS document_id
-        FROM share_links
-        JOIN documents ON documents.id = share_links.document_id
-        JOIN companies ON companies.id = documents.company_id
-        WHERE companies.slug = 'blueharbor'
-        """,
-    )
-    allowed = query_one(
-        app,
-        "SELECT id FROM attachments WHERE document_id = ? ORDER BY id LIMIT 1",
-        (shared["document_id"],),
-    )
-    other = query_one(
-        app,
-        """
-        SELECT attachments.id
-        FROM attachments
-        JOIN documents ON documents.id = attachments.document_id
-        JOIN companies ON companies.id = documents.company_id
-        WHERE companies.slug = 'northstar'
-        ORDER BY attachments.id
-        LIMIT 1
-        """,
-    )
+    ids = make_dynamic_records(app)
 
-    ok = client.get(f"/shares/{shared['code']}/attachments/{allowed['id']}")
+    ok = client.get(f"/shares/{ids['share_code']}/attachments/{ids['owned_attachment_id']}")
     assert ok.status_code == 200
-    assert b"Blue Harbor packing memo" in ok.data
+    assert ids["owned_content"].encode() in ok.data
 
-    leaked = client.get(f"/shares/{shared['code']}/attachments/{other['id']}")
+    leaked = client.get(f"/shares/{ids['share_code']}/attachments/{ids['foreign_attachment_id']}")
     assert leaked.status_code in {403, 404}
-    assert b"Northstar packing memo" not in leaked.data
-    assert b"Seal: NS-4492" not in leaked.data
+    assert ids["foreign_content"].encode() not in leaked.data
 
 
 def test_api_download_binds_attachment_to_requested_document_with_dynamic_records(app, client):
@@ -101,54 +74,58 @@ def test_api_download_binds_attachment_to_requested_document_with_dynamic_record
 
 
 def test_signed_in_downloads_and_uploads_keep_company_file_boundaries(app, client):
-    login_response = login(client)
-    assert login_response.status_code == 200
-    assert b"Northstar Medical Logistics documents" in login_response.data
+    ids = make_dynamic_records(app)
 
-    search = client.get("/search?q=Larkspur")
+    login_response = login(client, ids["username"], ids["password"])
+    assert login_response.status_code == 200
+    assert ids["company_name"].encode() in login_response.data
+
+    search = client.get(f"/search?q={ids['owned_vessel']}")
     assert search.status_code == 200
-    assert b"NS-2026-0419" in search.data
+    assert ids["owned_reference"].encode() in search.data
 
     upload = client.post(
-        "/documents/101/attachments",
-        data={"file": (io.BytesIO(b"Uploaded review memo\nSeal: NS-UPLOAD\n"), "review-memo.txt")},
+        f"/documents/{ids['owned_doc_id']}/attachments",
+        data={
+            "file": (
+                io.BytesIO(ids["upload_content"].encode()),
+                ids["upload_filename"],
+            )
+        },
         content_type="multipart/form-data",
         follow_redirects=True,
     )
     assert upload.status_code == 200
-    assert b"review-memo.txt" in upload.data
+    assert ids["upload_filename"].encode() in upload.data
 
     new_attachment = query_one(
         app,
-        "SELECT id FROM attachments WHERE filename = 'review-memo.txt' ORDER BY id DESC LIMIT 1",
+        "SELECT id FROM attachments WHERE filename = ? ORDER BY id DESC LIMIT 1",
+        (ids["upload_filename"],),
     )
-    own_download = client.get(f"/documents/101/attachments/{new_attachment['id']}")
+    own_download = client.get(f"/documents/{ids['owned_doc_id']}/attachments/{new_attachment['id']}")
     assert own_download.status_code == 200
-    assert b"Seal: NS-UPLOAD" in own_download.data
+    assert ids["upload_content"].encode() in own_download.data
 
-    foreign = query_one(
-        app,
-        """
-        SELECT attachments.id
-        FROM attachments
-        JOIN documents ON documents.id = attachments.document_id
-        JOIN companies ON companies.id = documents.company_id
-        WHERE companies.slug = 'blueharbor'
-        ORDER BY attachments.id
-        LIMIT 1
-        """,
-    )
-    leaked = client.get(f"/documents/101/attachments/{foreign['id']}")
+    leaked = client.get(f"/documents/{ids['owned_doc_id']}/attachments/{ids['foreign_attachment_id']}")
     assert leaked.status_code in {403, 404}
-    assert b"Blue Harbor packing memo" not in leaked.data
-    assert b"Seal: BH-8814" not in leaked.data
+    assert ids["foreign_content"].encode() not in leaked.data
 
 
 def make_dynamic_records(app):
     suffix = uuid4().hex[:10]
-    token = f"ml-dyn-{suffix}"
-    owned_content = f"Owned dynamic memo {suffix}"
-    foreign_content = f"Foreign dynamic memo {suffix}"
+    token = f"{uuid4().hex}.{uuid4().hex}"
+    username = f"user-{suffix}"
+    password = f"pass-{uuid4().hex[:12]}"
+    company_name = f"Owned Company {suffix}"
+    owned_reference = f"OWN-{suffix}"
+    owned_vessel = f"Vessel-{suffix}"
+    foreign_reference = f"FOR-{suffix}"
+    share_code = f"s-{uuid4().hex}"
+    owned_content = f"Owned dynamic memo {uuid4().hex}"
+    foreign_content = f"Foreign dynamic memo {uuid4().hex}"
+    upload_filename = f"review-{suffix}.txt"
+    upload_content = f"Uploaded dynamic memo {uuid4().hex}\n"
     with app.app_context():
         storage = Path(app.config["STORAGE_DIR"])
         storage.mkdir(parents=True, exist_ok=True)
@@ -158,7 +135,7 @@ def make_dynamic_records(app):
         db = get_db()
         cursor = db.execute(
             "INSERT INTO companies (slug, name) VALUES (?, ?)",
-            (f"owned-{suffix}", f"Owned Company {suffix}"),
+            (f"owned-{suffix}", company_name),
         )
         owned_company = cursor.lastrowid
         cursor = db.execute(
@@ -173,13 +150,27 @@ def make_dynamic_records(app):
             """,
             (
                 owned_company,
-                f"user-{suffix}",
-                generate_password_hash("irrelevant"),
+                username,
+                generate_password_hash(password),
                 f"Dynamic User {suffix}",
                 "api",
             ),
         )
         user_id = cursor.lastrowid
+        cursor = db.execute(
+            """
+            INSERT INTO users (company_id, username, password_hash, display_name, role)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                foreign_company,
+                f"foreign-{suffix}",
+                generate_password_hash("irrelevant"),
+                f"Foreign User {suffix}",
+                "api",
+            ),
+        )
+        foreign_user_id = cursor.lastrowid
         db.execute(
             "INSERT INTO api_tokens (user_id, token, label, active) VALUES (?, ?, ?, 1)",
             (user_id, token, "dynamic token"),
@@ -189,7 +180,7 @@ def make_dynamic_records(app):
             INSERT INTO documents (company_id, reference, vessel, status, destination, eta, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (owned_company, f"OWN-{suffix}", "MV Own", "ready", "Dubai", "2026-07-01", user_id),
+            (owned_company, owned_reference, owned_vessel, "ready", "Dubai", "2026-07-01", user_id),
         )
         owned_doc = cursor.lastrowid
         cursor = db.execute(
@@ -197,7 +188,7 @@ def make_dynamic_records(app):
             INSERT INTO documents (company_id, reference, vessel, status, destination, eta, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (foreign_company, f"FOR-{suffix}", "MV Foreign", "ready", "Abu Dhabi", "2026-07-02", user_id),
+            (foreign_company, foreign_reference, "MV Foreign", "ready", "Abu Dhabi", "2026-07-02", foreign_user_id),
         )
         foreign_doc = cursor.lastrowid
         cursor = db.execute(
@@ -218,13 +209,28 @@ def make_dynamic_records(app):
             (foreign_doc, "foreign.txt", "text/plain", f"foreign-{suffix}.txt", len(foreign_content), user_id),
         )
         foreign_attachment = cursor.lastrowid
+        db.execute(
+            """
+            INSERT INTO share_links (code, document_id, created_by, expires_at, active)
+            VALUES (?, ?, ?, ?, 1)
+            """,
+            (share_code, owned_doc, user_id, "2027-01-01"),
+        )
         db.commit()
 
     return {
         "token": token,
+        "username": username,
+        "password": password,
+        "company_name": company_name,
+        "owned_reference": owned_reference,
+        "owned_vessel": owned_vessel,
+        "share_code": share_code,
         "owned_doc_id": owned_doc,
         "owned_attachment_id": owned_attachment,
         "foreign_attachment_id": foreign_attachment,
         "owned_content": owned_content,
         "foreign_content": foreign_content,
+        "upload_filename": upload_filename,
+        "upload_content": upload_content,
     }
