@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-TEST_ROOT="${TEST_ROOT:-/tests}"
-REWARD_FILE="${REWARD_FILE:-/logs/verifier/reward.txt}"
-APP_PARENT="$(dirname "${APP_UNDER_TEST:-/app/manifestlane}")"
+mkdir -p /logs/verifier
 
-mkdir -p "$(dirname "$REWARD_FILE")"
-
-if PYTHONPATH="${PYTHONPATH:-}:$APP_PARENT:/app" "$PYTHON_BIN" -m pytest "$TEST_ROOT/test_outputs.py" -q; then
-  echo 1 > "$REWARD_FILE"
+if PYTHONPATH="${PYTHONPATH:-}:/app" python3 -m pytest /tests/test_outputs.py -q; then
+  echo 1 > /logs/verifier/reward.txt
 else
-  echo 0 > "$REWARD_FILE"
+  echo 0 > /logs/verifier/reward.txt
 fi
