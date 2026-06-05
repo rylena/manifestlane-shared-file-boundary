@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Search - ManifestLane{% endblock %}
+{% block body %}
+  <section class="panel">
+    <h1>Search documents</h1>
+    <form method="get">
+      <label for="q">Text</label>
+      <input id="q" name="q" value="{{ query }}">
+      <button type="submit">Search</button>
+    </form>
+  </section>
+  {% if query %}
+    <section class="panel">
+      <h2>Results</h2>
+      <table>
+        <tbody>
+          {% for document in documents %}
+            <tr>
+              <td>{{ document.reference }}</td>
+              <td>{{ document.vessel }}</td>
+              <td><a href="{{ url_for('documents.detail', doc_id=document.id) }}">Open</a></td>
+            </tr>
+          {% else %}
+            <tr><td>No matching documents</td><td></td><td></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+{% endblock %}

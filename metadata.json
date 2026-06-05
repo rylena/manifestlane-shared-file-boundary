@@ -1,0 +1,14 @@
+{
+  "title": "ManifestLane Shared File Boundary",
+  "task_source": "manual_repository",
+  "category": "Access control & Auth",
+  "harbor_package": "manifestlane-shared-file-boundary",
+  "service_url": "http://www.manifestlane.com:8080/",
+  "source_tree": "/app/manifestlane",
+  "service_notes": "/app/SERVICE_NOTES.md",
+  "required_folders": [
+    "environment",
+    "tests"
+  ],
+  "solution_patch": "sol.patch"
+}

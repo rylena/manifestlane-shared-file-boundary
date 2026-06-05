@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - ManifestLane{% endblock %}
+{% block body %}
+  <section class="panel">
+    <h1>{{ g.user.company_name }} documents</h1>
+    <p>Signed in as {{ g.user.display_name }}.</p>
+  </section>
+  <section class="grid">
+    {% for document in documents %}
+      <article class="panel">
+        <h2>{{ document.reference }}</h2>
+        <p>{{ document.vessel }} to {{ document.destination }}</p>
+        <p>Status: {{ document.status }}; ETA: {{ document.eta }}</p>
+        <a href="{{ url_for('documents.detail', doc_id=document.id) }}">Open document</a>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

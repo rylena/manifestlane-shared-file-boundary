@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sign in - ManifestLane{% endblock %}
+{% block body %}
+  <section class="panel">
+    <h1>Sign in</h1>
+    <form method="post">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+      <button type="submit">Sign in</button>
+    </form>
+  </section>
+{% endblock %}

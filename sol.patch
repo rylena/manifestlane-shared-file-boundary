@@ -1,0 +1,51 @@
+--- a/manifestlane/api.py
++++ b/manifestlane/api.py
+@@ -47,7 +47,7 @@
+     if not store.user_can_see_document(user, doc_id):
+         abort(404)
+ 
+-    attachment = store.get_attachment(attachment_id)
++    attachment = store.get_attachment_for_document(doc_id, attachment_id)
+     if attachment is None:
+         abort(404)
+ 
+--- a/manifestlane/data_store.py
++++ b/manifestlane/data_store.py
+@@ -137,6 +137,17 @@
+     ).fetchone()
+ 
+ 
++def get_attachment_for_document(document_id, attachment_id):
++    return get_db().execute(
++        """
++        SELECT *
++        FROM attachments
++        WHERE document_id = ? AND id = ?
++        """,
++        (document_id, attachment_id),
++    ).fetchone()
++
++
+ def get_share_link(code):
+     return get_db().execute(
+         """
+--- a/manifestlane/documents.py
++++ b/manifestlane/documents.py
+@@ -54,7 +54,7 @@
+     if not store.user_can_see_document(g.user, doc_id):
+         abort(404)
+ 
+-    attachment = store.get_attachment(attachment_id)
++    attachment = store.get_attachment_for_document(doc_id, attachment_id)
+     if attachment is None:
+         abort(404)
+ 
+@@ -82,7 +82,7 @@
+     if link is None:
+         abort(404)
+ 
+-    attachment = store.get_attachment(attachment_id)
++    attachment = store.get_attachment_for_document(link["document_id"], attachment_id)
+     if attachment is None:
+         abort(404)
+ 
