@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ document.reference }} - ManifestLane{% endblock %}
+{% block body %}
+  <section class="panel">
+    <h1>{{ document.reference }}</h1>
+    <p>{{ document.vessel }} to {{ document.destination }}. Status: {{ document.status }}.</p>
+  </section>
+  <section class="panel">
+    <h2>Memos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Size</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for attachment in attachments %}
+          <tr>
+            <td>{{ attachment.filename }}</td>
+            <td>{{ attachment.byte_length }}</td>
+            <td><a href="{{ url_for('documents.download_attachment', doc_id=document.id, attachment_id=attachment.id) }}">Download</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="panel">
+    <h2>Upload memo</h2>
+    <form action="{{ url_for('documents.upload_attachment', doc_id=document.id) }}" method="post" enctype="multipart/form-data">
+      <label for="file">Memo file</label>
+      <input id="file" name="file" type="file">
+      <button type="submit">Upload</button>
+    </form>
+  </section>
+{% endblock %}

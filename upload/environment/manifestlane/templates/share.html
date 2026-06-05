@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Shared {{ document.reference }} - ManifestLane{% endblock %}
+{% block body %}
+  <section class="panel">
+    <h1>Shared document {{ document.reference }}</h1>
+    <p>{{ document.vessel }} to {{ document.destination }}.</p>
+  </section>
+  <section class="panel">
+    <h2>Available files</h2>
+    <table>
+      <tbody>
+        {% for attachment in attachments %}
+          <tr>
+            <td>{{ attachment.filename }}</td>
+            <td><a href="{{ url_for('documents.shared_attachment', code=code, attachment_id=attachment.id) }}">Download</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}
